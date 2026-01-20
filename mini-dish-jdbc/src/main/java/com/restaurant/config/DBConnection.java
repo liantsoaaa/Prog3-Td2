@@ -11,26 +11,31 @@ public class DBConnection {
     private final String password;
 
     public DBConnection() {
-        Dotenv dotenv = Dotenv.load();
-        this.url = dotenv.get("DB_URL");
-        this.username = dotenv.get("DB_USERNAME");
-        this.password = dotenv.get("DB_PASSWORD");
+        Dotenv dotenv = Dotenv.configure()
+                .directory("./")
+                .ignoreIfMissing()
+                .load();
+
+        this.url = dotenv.get("DB_URL", "jdbc:postgresql://localhost:5432/mini_dish_db");
+        this.username = dotenv.get("DB_USERNAME", "mini_dish_manager");
+        this.password = dotenv.get("DB_PASSWORD", "1234");
     }
 
     public Connection getConnection() throws SQLException {
-        try{
+        try {
             return DriverManager.getConnection(url, username, password);
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Erreur de connexion à la base de données: " + e.getMessage(), e);
         }
     }
 
     public void closeConnection(Connection connection) throws SQLException {
-        try{
-            connection.close();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erreur lors de la fermeture de la connexion: " + e.getMessage(), e);
         }
     }
-
 }

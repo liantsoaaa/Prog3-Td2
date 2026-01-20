@@ -48,6 +48,10 @@ public class Ingredient {
         return dish;
     }
 
+    public Double getCost() {
+        return this.price;
+    }
+
      public void setId(int id) {
         this.id = id;
     }

@@ -11,3 +11,6 @@ grant create on schema public to mini_dish_db_manager;
 alter default privileges in schema public
 grant select , insert ,update ,delete on tables to mini_dish_db_manager;
 
+ALTER TABLE dish ADD COLUMN price NUMERIC(10, 2);
+
+
