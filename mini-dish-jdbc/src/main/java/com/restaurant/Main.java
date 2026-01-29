@@ -37,6 +37,12 @@ public class Main {
         System.out.println("\n=== TESTS TD6 - CONVERSIONS D'UNITÉS ===\n");
         testTD6_UnitConversion(dr);
 
+        System.out.println("\n=== TESTS ÉVALUATION - GESTION DES TABLES ===\n");
+        testEval_CreateOrderWithTable(dr);
+        testEval_TableNotAvailable(dr);
+        testEval_NoTableAvailable(dr);
+
+
         System.out.println("\n=== FIN DES TESTS ===");
     }
 
@@ -566,5 +572,133 @@ public class Main {
             System.out.println("\n✗ Erreur: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+
+    //TESTS EXAMEN---------------------------------------------------------------------------------------------------------------------------------------
+    private static void testEval_CreateOrderWithTable(DataRetriever dr) {
+        System.out.println("--- Test EVAL.1: Créer une commande avec table ---");
+        try {
+            Order newOrder = new Order();
+            newOrder.setCreationDatetime(Instant.now());
+
+            // Spécifier la table
+            RestaurantTable table = new RestaurantTable(1, 1);
+            newOrder.setTable(table);
+
+            // Spécifier les dates d'arrivée et départ
+            newOrder.setArrivalDatetime(Instant.parse("2026-01-30T12:00:00Z"));
+            newOrder.setDepartureDatetime(Instant.parse("2026-01-30T14:00:00Z"));
+
+            List<DishOrder> dishOrders = new ArrayList<>();
+            Dish dish1 = dr.findDishById(1);
+            DishOrder do1 = new DishOrder();
+            do1.setDish(dish1);
+            do1.setQuantity(1);
+            dishOrders.add(do1);
+
+            newOrder.setDishOrders(dishOrders);
+
+            Order saved = dr.saveOrder(newOrder);
+            System.out.println("✓ Commande créée: " + saved.getReference());
+            System.out.println("  Table: n°" + saved.getTable().getTableNumber());
+            System.out.println("  Arrivée: " + saved.getArrivalDatetime());
+            System.out.println("  Départ: " + saved.getDepartureDatetime());
+
+        } catch (Exception e) {
+            System.out.println("✗ Erreur: " + e.getMessage());
+        }
+        System.out.println();
+    }
+
+    private static void testEval_TableNotAvailable(DataRetriever dr) {
+        System.out.println("--- Test EVAL.2: Table occupée mais autres disponibles ---");
+        try {
+            Order newOrder = new Order();
+            newOrder.setCreationDatetime(Instant.now());
+
+            // Essayer d'utiliser la même table au même moment
+            RestaurantTable table = new RestaurantTable(1, 1);
+            newOrder.setTable(table);
+
+            newOrder.setArrivalDatetime(Instant.parse("2026-01-30T12:30:00Z"));
+            newOrder.setDepartureDatetime(Instant.parse("2026-01-30T13:30:00Z"));
+
+            List<DishOrder> dishOrders = new ArrayList<>();
+            Dish dish1 = dr.findDishById(1);
+            DishOrder do1 = new DishOrder();
+            do1.setDish(dish1);
+            do1.setQuantity(1);
+            dishOrders.add(do1);
+
+            newOrder.setDishOrders(dishOrders);
+
+            dr.saveOrder(newOrder);
+            System.out.println("✗ FAIL: Devrait lever une exception");
+
+        } catch (RuntimeException e) {
+            System.out.println("✓ Exception levée (attendu):");
+            System.out.println("  " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("✗ Erreur inattendue: " + e.getMessage());
+        }
+        System.out.println();
+    }
+
+    private static void testEval_NoTableAvailable(DataRetriever dr) {
+        System.out.println("--- Test EVAL.3: Aucune table disponible ---");
+        try {
+            // Créer des commandes sur toutes les tables
+            for (int i = 2; i <= 5; i++) {
+                Order order = new Order();
+                order.setCreationDatetime(Instant.now());
+
+                RestaurantTable table = new RestaurantTable(i, i);
+                order.setTable(table);
+
+                order.setArrivalDatetime(Instant.parse("2026-01-30T18:00:00Z"));
+                order.setDepartureDatetime(Instant.parse("2026-01-30T20:00:00Z"));
+
+                List<DishOrder> dishOrders = new ArrayList<>();
+                Dish dish1 = dr.findDishById(1);
+                DishOrder do1 = new DishOrder();
+                do1.setDish(dish1);
+                do1.setQuantity(1);
+                dishOrders.add(do1);
+
+                order.setDishOrders(dishOrders);
+
+                dr.saveOrder(order);
+            }
+
+            // Maintenant essayer de créer une commande alors que toutes les tables sont prises
+            Order newOrder = new Order();
+            newOrder.setCreationDatetime(Instant.now());
+
+            RestaurantTable table = new RestaurantTable(1, 1);
+            newOrder.setTable(table);
+
+            newOrder.setArrivalDatetime(Instant.parse("2026-01-30T18:30:00Z"));
+            newOrder.setDepartureDatetime(Instant.parse("2026-01-30T19:30:00Z"));
+
+            List<DishOrder> dishOrders = new ArrayList<>();
+            Dish dish1 = dr.findDishById(1);
+            DishOrder do1 = new DishOrder();
+            do1.setDish(dish1);
+            do1.setQuantity(1);
+            dishOrders.add(do1);
+
+            newOrder.setDishOrders(dishOrders);
+
+            dr.saveOrder(newOrder);
+            System.out.println("✗ FAIL: Devrait lever une exception");
+
+        } catch (RuntimeException e) {
+            System.out.println("✓ Exception levée (attendu):");
+            System.out.println("  " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("✗ Erreur inattendue: " + e.getMessage());
+        }
+        System.out.println();
     }
 }

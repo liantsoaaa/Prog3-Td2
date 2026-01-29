@@ -10,11 +10,6 @@ import java.util.List;
 public class DataRetriever {
     private final DBConnection dbConnection = new DBConnection();
 
-    //TD2 + TD3 -------------------------------------------------------------------------------------------------------
-
-    /**
-     * a) Récupère un plat par son ID avec tous ses ingrédients
-     */
     public Dish findDishById(Integer id) {
         try {
             Connection con = dbConnection.getConnection();
@@ -26,9 +21,6 @@ public class DataRetriever {
         }
     }
 
-    /**
-     * Version de findDishById qui utilise une connexion existante
-     */
     private Dish findDishById(Integer id, Connection con) throws SQLException {
         PreparedStatement dishStmt = con.prepareStatement("SELECT * FROM dish WHERE id = ?");
         dishStmt.setInt(1, id);
@@ -46,14 +38,13 @@ public class DataRetriever {
                     dishRs.getDouble("selling_price") : null;
             dish.setSellingPrice(sellingPrice);
 
-            // Récupérer le price si disponible
             if (dishRs.getObject("price") != null) {
                 dish.setPrice(dishRs.getDouble("price"));
             }
 
             dish.setDishIngredients(findDishIngredientsByDishId(id, con));
         } else {
-            throw new RuntimeException("Plat avec ID " + id + " introuvable");
+            throw new RuntimeException("Plat introuvable");
         }
 
         dishRs.close();
@@ -61,9 +52,6 @@ public class DataRetriever {
         return dish;
     }
 
-    /**
-     * b) Liste les ingrédients avec pagination
-     */
     public List<Ingredient> findIngredients(int page, int size) {
         List<Ingredient> ingredients = new ArrayList<>();
         try {
@@ -91,9 +79,6 @@ public class DataRetriever {
         return ingredients;
     }
 
-    /**
-     * c) Crée de nouveaux ingrédients (atomique : tout ou rien)
-     */
     public List<Ingredient> createIngredients(List<Ingredient> newIngredients) throws SQLException {
         Connection con = null;
         try {
@@ -101,7 +86,7 @@ public class DataRetriever {
 
             for (Ingredient ing : newIngredients) {
                 if (existingNames.contains(ing.getName())) {
-                    throw new RuntimeException("L'ingrédient existe déjà: " + ing.getName());
+                    throw new RuntimeException("Ingredient already exists");
                 }
             }
 
@@ -142,9 +127,6 @@ public class DataRetriever {
         }
     }
 
-    /**
-     * d) Sauvegarde un plat (insert ou update) avec ses ingrédients
-     */
     public Dish saveDish(Dish dishToSave) throws SQLException {
         Connection con = null;
         try {
@@ -231,9 +213,6 @@ public class DataRetriever {
         }
     }
 
-    /**
-     * e) Recherche des plats par nom d'ingrédient (contient)
-     */
     public List<Dish> findDishesByIngredientName(String ingredientName) {
         List<Dish> dishes = new ArrayList<>();
         try {
@@ -271,9 +250,6 @@ public class DataRetriever {
         return dishes;
     }
 
-    /**
-     * f) Recherche des ingrédients par critères avec pagination
-     */
     public List<Ingredient> findIngredientsByCriteria(String ingredientName, CategoryEnum category, String dishName, int page, int size) {
         List<Ingredient> ingredients = new ArrayList<>();
         StringBuilder sql = new StringBuilder(
@@ -325,11 +301,6 @@ public class DataRetriever {
         return ingredients;
     }
 
-    //TD4 -------------------------------------------------------------------------------------------------------------
-
-    /**
-     * TD4 - a) Sauvegarde un ingrédient avec ses mouvements de stock
-     */
     public Ingredient saveIngredient(Ingredient toSave) throws SQLException {
         Connection con = null;
         try {
@@ -420,15 +391,11 @@ public class DataRetriever {
         }
     }
 
-    /**
-     * TD4 - b) Calcule le stock d'un ingrédient à une date donnée (normalisé en KG)
-     */
     public Stock getStockValueAt(Integer ingredientId, Instant t) {
         try {
             Connection con = dbConnection.getConnection();
             Ingredient ingredient = findIngredientById(ingredientId, con);
 
-            // Récupérer TOUS les mouvements jusqu'à la date t
             String sql = "SELECT quantity, unit " +
                     "FROM stock_movement " +
                     "WHERE id_ingredient = ? AND movement_date <= ?";
@@ -438,14 +405,12 @@ public class DataRetriever {
             stmt.setTimestamp(2, Timestamp.from(t));
             ResultSet rs = stmt.executeQuery();
 
-            // Calculer le total en convertissant tout en KG
             double totalInKg = 0.0;
 
             while (rs.next()) {
                 double quantity = rs.getDouble("quantity");
                 String unit = rs.getString("unit");
 
-                // Convertir en KG
                 double quantityInKg = UnitConversion.convertToKg(
                         ingredient.getName(),
                         quantity,
@@ -459,7 +424,6 @@ public class DataRetriever {
             stmt.close();
             dbConnection.closeConnection(con);
 
-            // Créer le stock avec le résultat en KG
             Stock stock = new Stock();
             stock.setIngredient(ingredient);
             stock.setCalculatedAt(t);
@@ -556,23 +520,64 @@ public class DataRetriever {
         return names;
     }
 
-    // TD5 ------------------------------------------------------------------------------------------------------------
-
-    /**
-     * TD5 - i) Sauvegarde une commande avec vérification des stocks
-     */
     public Order saveOrder(Order orderToSave) throws SQLException {
         Connection con = null;
         try {
             con = dbConnection.getConnection();
             con.setAutoCommit(false);
 
-            // 1. Vérifier la disponibilité des stocks pour tous les plats
+            if (orderToSave.getTable() == null || orderToSave.getTable().getId() == null) {
+                con.rollback();
+                dbConnection.closeConnection(con);
+                throw new RuntimeException("Table required");
+            }
+
+            if (orderToSave.getArrivalDatetime() == null || orderToSave.getDepartureDatetime() == null) {
+                con.rollback();
+                dbConnection.closeConnection(con);
+                throw new RuntimeException("Dates required");
+            }
+
+            boolean tableAvailable = isTableAvailable(
+                    orderToSave.getTable().getId(),
+                    orderToSave.getArrivalDatetime(),
+                    orderToSave.getDepartureDatetime(),
+                    con
+            );
+
+            if (!tableAvailable) {
+                List<RestaurantTable> availableTables = findAvailableTables(
+                        orderToSave.getArrivalDatetime(),
+                        orderToSave.getDepartureDatetime(),
+                        con
+                );
+
+                con.rollback();
+                dbConnection.closeConnection(con);
+
+                RestaurantTable requestedTable = findTableById(orderToSave.getTable().getId(),
+                        dbConnection.getConnection());
+
+                String errorMessage = "Table " + requestedTable.getTableNumber() + " unavailable. ";
+
+                if (availableTables.isEmpty()) {
+                    errorMessage += "No tables available.";
+                } else {
+                    errorMessage += "Available: ";
+                    List<String> tableNumbers = new ArrayList<>();
+                    for (RestaurantTable table : availableTables) {
+                        tableNumbers.add(String.valueOf(table.getTableNumber()));
+                    }
+                    errorMessage += String.join(", ", tableNumbers);
+                }
+
+                throw new RuntimeException(errorMessage);
+            }
+
             Instant now = Instant.now();
             for (DishOrder dishOrder : orderToSave.getDishOrders()) {
                 Dish dish = findDishById(dishOrder.getDish().getId(), con);
 
-                // Vérifier chaque ingrédient du plat
                 for (DishIngredient di : dish.getDishIngredients()) {
                     Stock stock = getStockValueAt(di.getIngredient().getId(), now);
                     double requiredQuantity = di.getQuantityRequired() * dishOrder.getQuantity();
@@ -580,18 +585,13 @@ public class DataRetriever {
                     if (stock.getQuantity() < requiredQuantity) {
                         con.rollback();
                         dbConnection.closeConnection(con);
-                        throw new RuntimeException(
-                                "Stock insuffisant pour l'ingrédient: " + di.getIngredient().getName() +
-                                        " (Disponible: " + stock.getQuantity() + " " + stock.getUnit() +
-                                        ", Requis: " + requiredQuantity + " " + di.getUnit() + ")"
-                        );
+                        throw new RuntimeException("Insufficient stock: " + di.getIngredient().getName());
                     }
                 }
             }
 
             boolean isUpdate = false;
 
-            // 2. Vérifier si c'est une mise à jour
             if (orderToSave.getId() != null && orderToSave.getId() > 0) {
                 PreparedStatement checkStmt = con.prepareStatement("SELECT id FROM \"order\" WHERE id = ?");
                 checkStmt.setInt(1, orderToSave.getId());
@@ -602,7 +602,6 @@ public class DataRetriever {
             }
 
             if (!isUpdate) {
-                // 3. Générer la référence si elle n'existe pas (EN JAVA)
                 if (orderToSave.getReference() == null || orderToSave.getReference().isEmpty()) {
                     PreparedStatement countStmt = con.prepareStatement("SELECT COUNT(*) FROM \"order\"");
                     ResultSet countRs = countStmt.executeQuery();
@@ -616,13 +615,16 @@ public class DataRetriever {
                     orderToSave.setReference(String.format("ORD%05d", nextNumber));
                 }
 
-                // 4. Insérer la commande
                 PreparedStatement insertOrder = con.prepareStatement(
-                        "INSERT INTO \"order\" (reference, creation_datetime) VALUES (?, ?) RETURNING id"
+                        "INSERT INTO \"order\" (reference, creation_datetime, id_table, arrival_datetime, departure_datetime) " +
+                                "VALUES (?, ?, ?, ?, ?) RETURNING id"
                 );
                 insertOrder.setString(1, orderToSave.getReference());
                 insertOrder.setTimestamp(2, Timestamp.from(orderToSave.getCreationDatetime() != null ?
                         orderToSave.getCreationDatetime() : Instant.now()));
+                insertOrder.setInt(3, orderToSave.getTable().getId());
+                insertOrder.setTimestamp(4, Timestamp.from(orderToSave.getArrivalDatetime()));
+                insertOrder.setTimestamp(5, Timestamp.from(orderToSave.getDepartureDatetime()));
 
                 ResultSet rs = insertOrder.executeQuery();
                 if (rs.next()) {
@@ -632,24 +634,25 @@ public class DataRetriever {
                 insertOrder.close();
 
             } else {
-                // Mise à jour de la commande
                 PreparedStatement updateOrder = con.prepareStatement(
-                        "UPDATE \"order\" SET reference = ?, creation_datetime = ? WHERE id = ?"
+                        "UPDATE \"order\" SET reference = ?, creation_datetime = ?, id_table = ?, " +
+                                "arrival_datetime = ?, departure_datetime = ? WHERE id = ?"
                 );
                 updateOrder.setString(1, orderToSave.getReference());
                 updateOrder.setTimestamp(2, Timestamp.from(orderToSave.getCreationDatetime()));
-                updateOrder.setInt(3, orderToSave.getId());
+                updateOrder.setInt(3, orderToSave.getTable().getId());
+                updateOrder.setTimestamp(4, Timestamp.from(orderToSave.getArrivalDatetime()));
+                updateOrder.setTimestamp(5, Timestamp.from(orderToSave.getDepartureDatetime()));
+                updateOrder.setInt(6, orderToSave.getId());
                 updateOrder.executeUpdate();
                 updateOrder.close();
 
-                // Supprimer les anciens dishorders
                 PreparedStatement deleteStmt = con.prepareStatement("DELETE FROM dishorder WHERE id_order = ?");
                 deleteStmt.setInt(1, orderToSave.getId());
                 deleteStmt.executeUpdate();
                 deleteStmt.close();
             }
 
-            // 5. Insérer les dishorders
             if (orderToSave.getDishOrders() != null && !orderToSave.getDishOrders().isEmpty()) {
                 PreparedStatement insertDishOrder = con.prepareStatement(
                         "INSERT INTO dishorder (id_order, id_dish, quantity) VALUES (?, ?, ?) RETURNING id"
@@ -669,7 +672,6 @@ public class DataRetriever {
                 insertDishOrder.close();
             }
 
-            // 6. Déduire les stocks (créer des mouvements négatifs)
             PreparedStatement insertMovement = con.prepareStatement(
                     "INSERT INTO stock_movement (id_ingredient, quantity, unit, movement_date) VALUES (?, ?, ?, ?)"
             );
@@ -706,23 +708,20 @@ public class DataRetriever {
                         dbConnection.closeConnection(con);
                     }
                 } catch (SQLException ex) {
-                    // Ignorer
                 }
             }
             throw new RuntimeException(e);
         }
     }
 
-    /**
-     * TD5 - ii) Récupère une commande par sa référence
-     */
     public Order findOrderByReference(String reference) {
         try {
             Connection con = dbConnection.getConnection();
 
-            // Récupérer la commande
             PreparedStatement orderStmt = con.prepareStatement(
-                    "SELECT * FROM \"order\" WHERE reference = ?"
+                    "SELECT o.*, t.table_number FROM \"order\" o " +
+                            "LEFT JOIN restaurant_table t ON o.id_table = t.id " +
+                            "WHERE o.reference = ?"
             );
             orderStmt.setString(1, reference);
             ResultSet orderRs = orderStmt.executeQuery();
@@ -734,11 +733,26 @@ public class DataRetriever {
                 order.setReference(orderRs.getString("reference"));
                 order.setCreationDatetime(orderRs.getTimestamp("creation_datetime").toInstant());
 
-                // Récupérer les dishorders
+                if (orderRs.getObject("id_table") != null) {
+                    RestaurantTable table = new RestaurantTable(
+                            orderRs.getInt("id_table"),
+                            orderRs.getInt("table_number")
+                    );
+                    order.setTable(table);
+                }
+
+                if (orderRs.getTimestamp("arrival_datetime") != null) {
+                    order.setArrivalDatetime(orderRs.getTimestamp("arrival_datetime").toInstant());
+                }
+
+                if (orderRs.getTimestamp("departure_datetime") != null) {
+                    order.setDepartureDatetime(orderRs.getTimestamp("departure_datetime").toInstant());
+                }
+
                 order.setDishOrders(findDishOrdersByOrderId(order.getId(), con));
             } else {
                 dbConnection.closeConnection(con);
-                throw new RuntimeException("Commande avec référence " + reference + " introuvable");
+                throw new RuntimeException("Order not found");
             }
 
             orderRs.close();
@@ -751,9 +765,6 @@ public class DataRetriever {
         }
     }
 
-    /**
-     * Méthode auxiliaire pour récupérer les dishorders d'une commande
-     */
     private List<DishOrder> findDishOrdersByOrderId(int orderId, Connection con) {
         List<DishOrder> dishOrders = new ArrayList<>();
         try {
@@ -770,7 +781,6 @@ public class DataRetriever {
                 dishOrder.setId(rs.getInt("id"));
                 dishOrder.setQuantity(rs.getInt("quantity"));
 
-                // Récupérer le plat complet
                 Dish dish = findDishById(rs.getInt("id_dish"), con);
                 dishOrder.setDish(dish);
 
@@ -785,21 +795,16 @@ public class DataRetriever {
         return dishOrders;
     }
 
-    /**
-     * TD6 - Réinitialise les stocks pour les tests
-     */
     public void resetStocksForTesting() throws SQLException {
         Connection con = null;
         try {
             con = dbConnection.getConnection();
             con.setAutoCommit(false);
 
-            // Supprimer tous les mouvements
             PreparedStatement deleteStmt = con.prepareStatement("DELETE FROM stock_movement");
             deleteStmt.executeUpdate();
             deleteStmt.close();
 
-            // Réinsérer le stock initial
             PreparedStatement insertStmt = con.prepareStatement(
                     "INSERT INTO stock_movement (id_ingredient, quantity, unit, movement_date) " +
                             "SELECT id, ?, 'KG', ? FROM ingredient WHERE name = ?"
@@ -830,8 +835,6 @@ public class DataRetriever {
             con.setAutoCommit(true);
             dbConnection.closeConnection(con);
 
-            System.out.println("Stocks réinitialisés avec succès");
-
         } catch (Exception e) {
             if (con != null) {
                 try {
@@ -840,10 +843,78 @@ public class DataRetriever {
                         dbConnection.closeConnection(con);
                     }
                 } catch (SQLException ex) {
-
                 }
             }
             throw new RuntimeException(e);
         }
+    }
+
+    private boolean isTableAvailable(Integer tableId, Instant arrivalTime, Instant departureTime, Connection con) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM \"order\" " +
+                "WHERE id_table = ? " +
+                "AND NOT (departure_datetime <= ? OR arrival_datetime >= ?)";
+
+        PreparedStatement stmt = con.prepareStatement(sql);
+        stmt.setInt(1, tableId);
+        stmt.setTimestamp(2, Timestamp.from(arrivalTime));
+        stmt.setTimestamp(3, Timestamp.from(departureTime));
+
+        ResultSet rs = stmt.executeQuery();
+        boolean available = true;
+        if (rs.next()) {
+            available = rs.getInt(1) == 0;
+        }
+
+        rs.close();
+        stmt.close();
+
+        return available;
+    }
+
+    private List<RestaurantTable> findAvailableTables(Instant arrivalTime, Instant departureTime, Connection con) throws SQLException {
+        List<RestaurantTable> availableTables = new ArrayList<>();
+
+        String sql = "SELECT t.id, t.table_number FROM restaurant_table t " +
+                "WHERE t.id NOT IN (" +
+                "  SELECT DISTINCT o.id_table FROM \"order\" o " +
+                "  WHERE o.id_table IS NOT NULL " +
+                "  AND NOT (o.departure_datetime <= ? OR o.arrival_datetime >= ?)" +
+                ")";
+
+        PreparedStatement stmt = con.prepareStatement(sql);
+        stmt.setTimestamp(1, Timestamp.from(arrivalTime));
+        stmt.setTimestamp(2, Timestamp.from(departureTime));
+
+        ResultSet rs = stmt.executeQuery();
+        while (rs.next()) {
+            RestaurantTable table = new RestaurantTable(
+                    rs.getInt("id"),
+                    rs.getInt("table_number")
+            );
+            availableTables.add(table);
+        }
+
+        rs.close();
+        stmt.close();
+
+        return availableTables;
+    }
+
+    private RestaurantTable findTableById(Integer id, Connection con) throws SQLException {
+        PreparedStatement stmt = con.prepareStatement("SELECT * FROM restaurant_table WHERE id = ?");
+        stmt.setInt(1, id);
+        ResultSet rs = stmt.executeQuery();
+
+        RestaurantTable table = null;
+        if (rs.next()) {
+            table = new RestaurantTable(
+                    rs.getInt("id"),
+                    rs.getInt("table_number")
+            );
+        }
+
+        rs.close();
+        stmt.close();
+        return table;
     }
 }

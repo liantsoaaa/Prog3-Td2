@@ -8,6 +8,9 @@ public class Order {
     private String reference;
     private Instant creationDatetime;
     private List<DishOrder> dishOrders;
+    private RestaurantTable table;
+    private Instant arrivalDatetime;
+    private Instant departureDatetime;
 
     public Order() {
     }
@@ -70,5 +73,29 @@ public class Order {
 
     public void setDishOrders(List<DishOrder> dishOrders) {
         this.dishOrders = dishOrders;
+    }
+
+    public RestaurantTable getTable() {
+        return table;
+    }
+
+    public void setTable(RestaurantTable table) {
+        this.table = table;
+    }
+
+    public Instant getArrivalDatetime() {
+        return arrivalDatetime;
+    }
+
+    public void setArrivalDatetime(Instant arrivalDatetime) {
+        this.arrivalDatetime = arrivalDatetime;
+    }
+
+    public Instant getDepartureDatetime() {
+        return departureDatetime;
+    }
+
+    public void setDepartureDatetime(Instant departureDatetime) {
+        this.departureDatetime = departureDatetime;
     }
 }
