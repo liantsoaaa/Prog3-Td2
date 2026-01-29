@@ -17,9 +17,6 @@ CREATE TABLE Dish (
     selling_price NUMERIC(10, 2)
 );
 
--- Enum
-CREATE TYPE unit_type_enum AS ENUM ('KG', 'G', 'L', 'ML', 'PIECE');
-
 -- Insert
 INSERT INTO DishIngredient (id, id_dish, id_ingredient, quantity_required, unit) VALUES
 (1, 1, 1, 0.20, 'KG'),
@@ -34,3 +31,13 @@ INSERT INTO Dish (id, name, dish_type, selling_price) VALUES
 (3, 'Riz aux légumes', 'MAIN', NULL),
 (4, 'Gâteau au chocolat', 'DESSERT', 8000.00),
 (5, 'Salade de fruits', 'DESSERT', NULL);
+
+-- privilegs sur les tables
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mini_dish_manager;
+
+-- privilèges sur les séquences
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mini_dish_manager;
+
+-- privilèges par défaut pour les futures tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO mini_dish_manager;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO mini_dish_manager;

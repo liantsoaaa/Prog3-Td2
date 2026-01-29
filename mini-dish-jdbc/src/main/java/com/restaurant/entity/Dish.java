@@ -11,6 +11,16 @@ public class Dish {
     private DishTypeEnum dishType;
     private Double sellingPrice;
     private List<DishIngredient> dishIngredients = new ArrayList<>();
+    private Double price;
+
+    public Dish(int id, String name, DishTypeEnum dishType, Double sellingPrice, List<DishIngredient> dishIngredients, Double price) {
+        this.id = id;
+        this.name = name;
+        this.dishType = dishType;
+        this.sellingPrice = sellingPrice;
+        this.dishIngredients = dishIngredients;
+        this.price = price;
+    }
 
     public Dish(int id, String name, DishTypeEnum dishType, List<DishIngredient> dishIngredients) {
         this.id = id;
@@ -48,22 +58,13 @@ public class Dish {
         return sellingPrice;
     }
 
-    public Double getDishCost() {
-        Double totalCost = 0.0;
-        for (DishIngredient di : dishIngredients) {
-            if (di.getIngredient() != null && di.getQuantityRequired() != null) {
-                totalCost += di.getIngredient().getPrice() * di.getQuantityRequired();
-            }
-        }
-        return totalCost;
+
+    public Double getPrice() {
+        return price;
     }
 
-
-    public Double getGrossMargin() {
-        if (sellingPrice == null) {
-            throw new RuntimeException("Le prix de vente est null");
-        }
-        return sellingPrice - getDishCost();
+    public void setPrice(Double price) {
+        this.price = price;
     }
 
     public void setId(int id) {
@@ -84,6 +85,27 @@ public class Dish {
 
     public void setSellingPrice(Double sellingPrice) {
         this.sellingPrice = sellingPrice;
+    }
+
+    public Double getDishCost() {
+        if (dishIngredients == null || dishIngredients.isEmpty()) {
+            return 0.0;
+        }
+
+        double totalCost = 0.0;
+        for (DishIngredient di : dishIngredients) {
+            if (di.getIngredient() != null) {
+                totalCost += di.getIngredient().getPrice() * di.getQuantityRequired();
+            }
+        }
+        return totalCost;
+    }
+
+    public Double getGrossMargin() {
+        if (price == null) {
+            return 0.0;
+        }
+        return price - getDishCost();
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.restaurant.entity;
 
+import java.util.List;
 import java.util.Objects;
 
 public class Ingredient {
@@ -8,6 +9,7 @@ public class Ingredient {
     private double price;
     private CategoryEnum category;
     private Dish dish;
+    private List<StockMovement> stockMovementList;
 
     public Ingredient(int id, String name, double price, CategoryEnum category, Dish dish) {
         this.id = id;
@@ -16,13 +18,15 @@ public class Ingredient {
         this.category = category;
         this.dish = dish;
     }
+
     public Ingredient(int id, String name, double price, CategoryEnum category) {
         this.id = id;
         this.name = name;
         this.price = price;
         this.category = category;
     }
-    public Ingredient( String name, double price, CategoryEnum category) {
+
+    public Ingredient(String name, double price, CategoryEnum category) {
         this.name = name;
         this.price = price;
         this.category = category;
@@ -52,7 +56,11 @@ public class Ingredient {
         return this.price;
     }
 
-     public void setId(int id) {
+    public List<StockMovement> getStockMovementList() {
+        return stockMovementList;
+    }
+
+    public void setId(int id) {
         this.id = id;
     }
 
@@ -70,6 +78,10 @@ public class Ingredient {
 
     public void setDish(Dish dish) {
         this.dish = dish;
+    }
+
+    public void setStockMovementList(List<StockMovement> stockMovementList) {
+        this.stockMovementList = stockMovementList;
     }
 
     @Override
